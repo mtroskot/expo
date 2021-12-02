@@ -11,7 +11,6 @@ import expo.modules.updates.db.enums.UpdateStatus
 import expo.modules.updates.launcher.Launcher.LauncherCallback
 import expo.modules.updates.loader.EmbeddedLoader
 import expo.modules.updates.loader.FileDownloader
-import expo.modules.updates.loader.FileDownloader.AssetDownloadCallback
 import expo.modules.updates.loader.LoaderFiles
 import expo.modules.updates.manifest.EmbeddedManifest
 import expo.modules.updates.manifest.ManifestMetadata
@@ -42,8 +41,7 @@ class DatabaseLauncher(
   private var launchAssetException: Exception? = null
   private var callback: LauncherCallback? = null
 
-  @Synchronized
-  fun launch(database: UpdatesDatabase, context: Context, callback: LauncherCallback?) {
+  suspend fun launch(database: UpdatesDatabase, context: Context, callback: LauncherCallback?) {
     if (this.callback != null) {
       throw AssertionError("DatabaseLauncher has already started. Create a new instance in order to launch a new version.")
     }
@@ -124,7 +122,7 @@ class DatabaseLauncher(
     return selectionPolicy.selectUpdateToLaunch(filteredLaunchableUpdates, manifestFilters)
   }
 
-  internal fun ensureAssetExists(asset: AssetEntity, database: UpdatesDatabase, context: Context): File? {
+  internal suspend fun ensureAssetExists(asset: AssetEntity, database: UpdatesDatabase, context: Context): File? {
     val assetFile = File(updatesDirectory, asset.relativePath)
     var assetFileExists = assetFile.exists()
     if (!assetFileExists) {
@@ -158,26 +156,22 @@ class DatabaseLauncher(
     return if (!assetFileExists) {
       // we still don't have the asset locally, so try downloading it remotely
       assetsToDownload++
-      fileDownloader.downloadAsset(
-        asset,
-        updatesDirectory,
-        configuration,
-        object : AssetDownloadCallback {
-          override fun onFailure(e: Exception, assetEntity: AssetEntity) {
-            Log.e(TAG, "Failed to load asset from disk or network", e)
-            if (assetEntity.isLaunchAsset) {
-              launchAssetException = e
-            }
-            maybeFinish(assetEntity, null)
-          }
-
-          override fun onSuccess(assetEntity: AssetEntity, isNew: Boolean) {
-            database.assetDao().updateAsset(assetEntity)
-            val assetFileLocal = File(updatesDirectory, assetEntity.relativePath)
-            maybeFinish(assetEntity, if (assetFileLocal.exists()) assetFileLocal else null)
-          }
+      try {
+        val assetDownloadResult = fileDownloader.downloadAsset(
+          asset,
+          updatesDirectory,
+          configuration,
+        )
+        database.assetDao().updateAsset(assetDownloadResult.assetEntity)
+        val assetFileLocal = File(updatesDirectory, assetDownloadResult.assetEntity.relativePath)
+        maybeFinish(assetDownloadResult.assetEntity, if (assetFileLocal.exists()) assetFileLocal else null)
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to load asset from disk or network", e)
+        if (asset.isLaunchAsset) {
+          launchAssetException = e
         }
-      )
+        maybeFinish(asset, null)
+      }
       null
     } else {
       assetFile
