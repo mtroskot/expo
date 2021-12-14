@@ -35,8 +35,7 @@ class UpdatesConfigurationInstrumentationTest {
     )
     Mockito.`when`(context.packageName).thenReturn(packageName)
     Mockito.`when`(context.packageManager).thenReturn(packageManager)
-    var config = UpdatesConfiguration()
-    config = config.loadValuesFromMetadata(context)
+    val config = UpdatesConfiguration(context, null)
     Assert.assertEquals(runtimeVersion, config.runtimeVersion)
   }
 
@@ -58,8 +57,7 @@ class UpdatesConfigurationInstrumentationTest {
     )
     Mockito.`when`(context.packageName).thenReturn(packageName)
     Mockito.`when`(context.packageManager).thenReturn(packageManager)
-    var config = UpdatesConfiguration()
-    config = config.loadValuesFromMetadata(context)
+    val config = UpdatesConfiguration(context, null)
     Assert.assertEquals(runtimeVersion, config.runtimeVersion)
   }
 }
